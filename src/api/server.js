@@ -22,8 +22,19 @@ const PORT = process.env.API_PORT || 3001;
 // Core Middleware
 // ============================================================
 
+// 安全修复：CORS不允许通配符配合credentials
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:3000', 'http://localhost:5173'];
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: function (origin, callback) {
+    if (!origin || corsOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
   exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
@@ -94,7 +105,8 @@ app.get('/health', (req, res) => {
 app.use('/api/v2/chat', authMiddleware, chatRoutes);
 
 // Knowledge routes
-app.use('/api/v2/knowledge', knowledgeRoutes);
+// 安全修复：知识库接口添加认证保护，防止未授权访问敏感心理健康数据
+app.use('/api/v2/knowledge', authMiddleware, knowledgeRoutes);
 
 // Assessment routes
 app.use('/api/v2/assessments', authMiddleware, assessmentRoutes);
@@ -154,8 +166,10 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   serviceState.errorCount++;
   console.error(`[ERROR] ${req.method} ${req.path}:`, err.message);
+  // 安全修复：不向客户端泄露内部错误详情
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
+    error: 'Internal server error',
+    message: 'An unexpected error occurred',
     requestId: req.requestId,
   });
 });

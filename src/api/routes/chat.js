@@ -157,7 +157,8 @@ router.get('/history/:sessionId', (req, res) => {
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
   }
-  if (session.userId && session.userId !== req.user?.id) {
+  // 安全修复：严格检查会话所有权，防止IDOR攻击
+  if (!req.user?.id || (session.userId && session.userId !== req.user.id)) {
     return res.status(403).json({ error: 'Access denied' });
   }
   res.json({
@@ -174,7 +175,8 @@ router.get('/history/:sessionId', (req, res) => {
 router.delete('/session/:sessionId', (req, res) => {
   const session = sessions.get(req.params.sessionId);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  if (session.userId && session.userId !== req.user?.id) {
+  // 安全修复：严格检查会话所有权，防止IDOR攻击
+  if (!req.user?.id || (session.userId && session.userId !== req.user.id)) {
     return res.status(403).json({ error: 'Access denied' });
   }
   sessions.delete(req.params.sessionId);

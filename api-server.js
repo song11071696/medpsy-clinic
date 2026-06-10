@@ -15,7 +15,7 @@ const { initTTS, synthesize } = require('./src/tts');
 // === 新增：安全模块导入 ===
 const { CrisisService } = require('./src/services/crisis-service');
 const { DataEncryption } = require('./src/privacy/data-encryption');
-const { authMiddleware, optionalAuth, requireRole, generateToken, revokeToken } = require('./src/api/middleware/auth');
+const { authMiddleware, optionalAuth, requireRole, generateToken, revokeToken, verifyToken } = require('./src/api/middleware/auth');
 
 const crisisService = new CrisisService();
 const encryption = new DataEncryption();
@@ -188,6 +188,16 @@ app.use(express.raw({ type: 'audio/*', limit: '25mb' }));
 
 app.use(generalLimiter.middleware());
 
+// 安全修复：添加安全响应头
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('X-XSS-Protection', '1; mode=block');
+  res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.set('X-Powered-By', 'MedPsy-Clinic');
+  next();
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   serviceState.requestCount++;
@@ -260,19 +270,11 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(400).json({ error: 'Invalid input' });
     }
 
-    // TODO: 接入实际用户数据库验证（bcrypt 哈希比对）
-    // 当前为演示框架，接受任何非空凭证
-    const token = generateToken({
-      id: username,
-      role: 'user',
-      permissions: ['consult', 'voice', 'knowledge'],
-    });
-
-    res.json({
-      success: true,
-      token,
-      expiresIn: '24h',
-      user: { id: username, role: 'user' },
+    // 安全修复：拒绝未配置的默认登录，要求实际用户验证
+    // 演示环境不再接受任意凭证
+    return res.status(401).json({
+      error: 'Authentication failed',
+      message: 'Invalid credentials. Please register first via /api/v2/users/register',
     });
   } catch (err) {
     console.error('[Auth] Login error:', encryption.maskSensitiveData(err.message));
@@ -794,7 +796,7 @@ app.post('/api/consult/voice', authMiddleware, voiceLimiter.middleware(), crisis
 });
 
 // Knowledge base listing
-app.get('/api/knowledge', (req, res) => {
+app.get('/api/knowledge', authMiddleware, (req, res) => {
   res.json({
     success: true,
     documents: getDocumentTitles(),
@@ -803,7 +805,7 @@ app.get('/api/knowledge', (req, res) => {
 });
 
 // Document retrieval (search without generation)
-app.post('/api/retrieve', (req, res) => {
+app.post('/api/retrieve', authMiddleware, (req, res) => {
   try {
     const { query, topK = 3 } = req.body;
 
@@ -830,7 +832,7 @@ app.post('/api/retrieve', (req, res) => {
     });
   } catch (err) {
     console.error('[Retrieve] Error:', err);
-    res.status(500).json({ error: 'Internal server error', message: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -961,7 +963,8 @@ app.use((err, req, res, next) => {
   console.error('[Server] Unhandled error:', encryption.maskSensitiveData(err.message || ''));
   res.status(500).json({
     error: 'Internal server error',
-    ...(isProduction ? {} : { message: err.message }),
+    // 安全修复：生产环境和开发环境都不泄露错误详情和堆栈
+    message: 'An unexpected error occurred',
   });
 });
 
@@ -980,10 +983,30 @@ function setupWebSocket(server) {
 
   const wss = new WebSocket.Server({ server, path: '/ws' });
 
+  // verifyClient: 验证WebSocket连接的token
   wss.on('connection', (ws, req) => {
+    // WebSocket认证：从URL参数或首条消息中验证token
     const clientIp = req.socket.remoteAddress;
     console.log(`[WebSocket] Client connected: ${clientIp}`);
     serviceState.wsConnections++;
+
+    // 从URL查询参数中提取token进行验证
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const token = url.searchParams.get('token');
+    if (!token) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Authentication required: missing token' }));
+      ws.close(4001, 'Authentication required');
+      return;
+    }
+    try {
+      const decoded = verifyToken(token);
+      ws.userId = decoded.id;
+      ws.userRole = decoded.role;
+    } catch (err) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Authentication failed: invalid token' }));
+      ws.close(4002, 'Invalid token');
+      return;
+    }
 
     ws.isAlive = true;
     ws.on('pong', () => { ws.isAlive = true; });
@@ -998,6 +1021,12 @@ function setupWebSocket(server) {
       try {
         const msg = JSON.parse(data.toString());
 
+        // 安全修复：WebSocket消息大小限制和基本验证
+        if (data.length > 65536) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Message too large' }));
+          return;
+        }
+
         if (msg.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
           return;
@@ -1009,9 +1038,16 @@ function setupWebSocket(server) {
             return;
           }
 
-          ws.send(JSON.stringify({ type: 'consult_start', query: msg.query }));
+          // 安全修复：对WebSocket查询也进行输入验证
+          const wsValidation = sanitizeInput(msg.query);
+          if (wsValidation.error) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid input' }));
+            return;
+          }
 
-          const result = await completion(msg.query);
+          ws.send(JSON.stringify({ type: 'consult_start', query: wsValidation.sanitized }));
+
+          const result = await completion(wsValidation.sanitized);
 
           // Stream the response word by word
           const words = result.answer.split(/(?<=[。！？.!?\s])/);
@@ -1048,7 +1084,7 @@ function setupWebSocket(server) {
 
         ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${msg.type}` }));
       } catch (err) {
-        ws.send(JSON.stringify({ type: 'error', message: err.message }));
+        ws.send(JSON.stringify({ type: 'error', message: 'Internal server error' }));
       }
     });
 

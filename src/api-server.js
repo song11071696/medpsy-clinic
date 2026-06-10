@@ -39,8 +39,17 @@ async function startServer() {
     }
 
     if (req.url === "/v1/chat/completions" && req.method === "POST") {
+      // 安全修复：添加请求体大小限制，防止内存耗尽攻击
       let body = "";
-      req.on("data", (chunk) => (body += chunk));
+      const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+      req.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > MAX_BODY_SIZE) {
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Request body too large" }));
+          req.destroy();
+        }
+      });
       req.on("end", async () => {
         try {
           const { messages, stream = false } = JSON.parse(body);

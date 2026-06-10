@@ -99,6 +99,11 @@ router.post('/create', (req, res) => {
 router.get('/:id', (req, res) => {
   const assessment = assessments.get(req.params.id);
   if (!assessment) return res.status(404).json({ error: 'Assessment not found' });
+  // IDOR防护：验证评估记录的所有权
+  const userId = req.user?.id || 'anonymous';
+  if (assessment.userId !== userId) {
+    return res.status(403).json({ error: 'Access denied: you do not own this assessment' });
+  }
   res.json(assessment);
 });
 
@@ -108,6 +113,11 @@ router.get('/:id', (req, res) => {
 router.post('/:id/submit', (req, res) => {
   const assessment = assessments.get(req.params.id);
   if (!assessment) return res.status(404).json({ error: 'Assessment not found' });
+  // IDOR防护：验证评估记录的所有权
+  const userId = req.user?.id || 'anonymous';
+  if (assessment.userId !== userId) {
+    return res.status(403).json({ error: 'Access denied: you do not own this assessment' });
+  }
   if (assessment.status === 'completed') {
     return res.status(400).json({ error: 'Assessment already completed' });
   }

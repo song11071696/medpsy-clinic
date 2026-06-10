@@ -8,6 +8,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const { generateToken, revokeToken, authMiddleware } = require('../middleware/auth');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sanitize, validateChatMessage, validateUsername } = require('../../utils/validators');
 
 // In-memory user store (use DB in production)
 const users = new Map();
@@ -116,9 +117,26 @@ router.put('/profile', authMiddleware, (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const { displayName, avatar, bio } = req.body;
-  if (displayName) user.profile.displayName = displayName;
-  if (avatar !== undefined) user.profile.avatar = avatar;
-  if (bio !== undefined) user.profile.bio = bio;
+  // 安全修复：对用户输入进行XSS净化，防止存储型XSS
+  if (displayName) {
+    const nameCheck = validateUsername(displayName);
+    if (!nameCheck.valid) return res.status(400).json({ error: nameCheck.error });
+    user.profile.displayName = sanitize(displayName, 100);
+  }
+  if (avatar !== undefined) {
+    // 安全修复：限制avatar为安全URL格式
+    if (typeof avatar === 'string' && avatar.length > 0) {
+      if (!/^https?:\/\/.+/.test(avatar) && !avatar.startsWith('data:image/')) {
+        return res.status(400).json({ error: 'Avatar must be a valid URL or data URI' });
+      }
+      user.profile.avatar = avatar.substring(0, 2048);
+    } else {
+      user.profile.avatar = null;
+    }
+  }
+  if (bio !== undefined) {
+    user.profile.bio = sanitize(String(bio), 500);
+  }
   user.updatedAt = new Date();
 
   res.json({ message: 'Profile updated', profile: user.profile });

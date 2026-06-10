@@ -90,7 +90,6 @@ app.post('/api/consult', async (req, res) => {
     console.error('[Consult] Error:', err);
     res.status(500).json({
       error: 'Internal server error',
-      message: err.message,
     });
   }
 });
@@ -145,7 +144,6 @@ app.post('/api/consult/voice', async (req, res) => {
     console.error('[Voice] Error:', err);
     res.status(500).json({
       error: 'Internal server error',
-      message: err.message,
     });
   }
 });

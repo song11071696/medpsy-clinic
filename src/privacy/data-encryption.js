@@ -117,14 +117,16 @@ class DataEncryption {
    * 密钥派生 (PBKDF2)
    */
   _deriveKey(userId) {
-    if (this.keyCache.has(userId)) return this.keyCache.get(userId);
+    // 安全修复：密钥缓存添加过期时间，防止内存中长期保留密钥
+    const cached = this.keyCache.get(userId);
+    if (cached && (Date.now() - cached.createdAt) < 3600000) return cached.key;
 
     const salt = crypto.createHash('sha256').update(userId).digest();
     const key = crypto.pbkdf2Sync(
       this.config.masterKey, salt,
       this.config.keyDerivationIterations, KEY_LENGTH, 'sha512'
     );
-    this.keyCache.set(userId, key);
+    this.keyCache.set(userId, { key, createdAt: Date.now() });
     return key;
   }
 
