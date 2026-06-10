@@ -1,0 +1,46 @@
+{
+  "sessionId": "2026-06-02T12:00:00.000Z",
+  "device": {
+    "platform": "win32",
+    "arch": "x64",
+    "cpus": 12,
+    "totalMemoryGB": "16.0",
+    "freeMemoryGB": "8.5",
+    "nodeVersion": "v20.11.0"
+  },
+  "modelLoads": [
+    {
+      "model": "MedPsy-4B-Q4_K_M",
+      "loadTimeMs": 12500,
+      "timestamp": "2026-06-02T12:00:12.500Z"
+    }
+  ],
+  "inferences": [
+    {
+      "prompt": "I've been feeling anxious about work lately...",
+      "tokenCount": 156,
+      "ttftMs": 890,
+      "tokensPerSecond": 18.42,
+      "totalTimeMs": 8460
+    },
+    {
+      "prompt": "Can you explain CBT?",
+      "tokenCount": 203,
+      "ttftMs": 720,
+      "tokensPerSecond": 21.15,
+      "totalTimeMs": 9597
+    },
+    {
+      "prompt": "What mindfulness exercises?",
+      "tokenCount": 178,
+      "ttftMs": 650,
+      "tokensPerSecond": 22.87,
+      "totalTimeMs": 7783
+    }
+  ],
+  "summary": {
+    "totalInferences": 3,
+    "avgTTFT": "753.3",
+    "avgTokensPerSec": "20.81"
+  }
+}

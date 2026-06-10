@@ -1,0 +1,31 @@
+# Device specifications for MedPsy Clinic reproducibility
+device:
+  type: "Desktop/Laptop"
+  os: "Windows 11 / macOS 14 / Ubuntu 22.04"
+hardware:
+  cpu: "Intel i7-12700 / AMD Ryzen 7 5800X / Apple M2"
+  cpu_cores: 8
+  ram_gb: 16
+  gpu: "NVIDIA RTX 3060 (6GB VRAM) / Apple M2 (unified memory)"
+  gpu_backend: "Vulkan (cross-platform via QVAC SDK)"
+  storage: "SSD with 10GB+ free space"
+software:
+  node_js: ">= 18.0.0"
+  npm: ">= 9.0.0"
+  qvac_sdk: "latest"
+models_used:
+  - name: "MedPsy-4B-Q4_K_M"
+    size_gb: 2.6
+    purpose: "Primary LLM inference"
+  - name: "nomic-embed-text-v1.5-Q4_K_M"
+    size_gb: 0.1
+    purpose: "Text embeddings for RAG"
+  - name: "whisper-base"
+    size_gb: 0.15
+    purpose: "Speech-to-text (optional)"
+  - name: "chatterbox-tts"
+    size_gb: 0.3
+    purpose: "Text-to-speech (optional)"
+minimum_hardware:
+  ram_gb: 8
+  note: "MedPsy-1.7B-Q4_K_M (~1.2GB) can be used on lower-end devices"

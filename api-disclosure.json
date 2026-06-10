@@ -1,0 +1,21 @@
+{
+  "project": "MedPsy Clinic",
+  "description": "This file discloses all external API calls used in the project, as required by QVAC hackathon rules.",
+  "remote_api_calls": [],
+  "note": "MedPsy Clinic runs entirely on-device using QVAC SDK. No cloud APIs, no external services, no data leaves the device. All AI inference (LLM, STT, TTS, embeddings, RAG) is performed locally.",
+  "external_dependencies": [
+    {
+      "name": "Hugging Face",
+      "purpose": "Model weight downloads only (one-time, during setup)",
+      "url": "https://huggingface.co/qvac/",
+      "frequency": "Once during initial setup"
+    },
+    {
+      "name": "npm registry",
+      "purpose": "Package installation only (one-time, during setup)",
+      "url": "https://registry.npmjs.org/",
+      "frequency": "Once during initial setup"
+    }
+  ],
+  "runtime_apis": "NONE — All inference runs locally via QVAC SDK"
+}

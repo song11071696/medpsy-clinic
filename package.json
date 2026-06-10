@@ -1,0 +1,38 @@
+{
+  "name": "medpsy-clinic",
+  "version": "1.0.0",
+  "description": "Medical Psychology Clinic - Rule-based mental health consultation platform",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "serve": "node api-server.js",
+    "test": "node --test test/*.test.js",
+    "dev": "node --watch src/index.js",
+    "audit": "npm audit"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "psychology",
+    "clinic",
+    "AI",
+    "RAG",
+    "mental-health"
+  ],
+  "author": "song11071696",
+  "license": "MIT",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "ws": "^8.16.0"
+  },
+  "optionalDependencies": {
+    "@qvac/sdk": "^0.12.2"
+  },
+  "devDependencies": {
+    "supertest": "^6.3.3"
+  }
+}

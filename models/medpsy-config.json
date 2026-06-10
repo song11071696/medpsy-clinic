@@ -1,0 +1,26 @@
+{
+  "models": {
+    "medpsy-4b": {
+      "name": "MedPsy-4B",
+      "source": "https://huggingface.co/qvac/MedPsy-4B",
+      "file": "MedPsy-4B-Q4_K_M.gguf",
+      "size_gb": 2.6,
+      "quantization": "Q4_K_M",
+      "context_size": 4096,
+      "backbone": "Qwen3",
+      "description": "Medical/psychological reasoning model. Outperforms Google MedGemma 27B."
+    },
+    "medpsy-1.7b": {
+      "name": "MedPsy-1.7B",
+      "source": "https://huggingface.co/qvac/MedPsy-1.7B",
+      "file": "MedPsy-1.7B-Q4_K_M.gguf",
+      "size_gb": 1.2,
+      "quantization": "Q4_K_M",
+      "context_size": 4096,
+      "backbone": "Qwen3",
+      "description": "Lightweight medical reasoning model. Outperforms Google MedGemma 4B by 11+ points."
+    }
+  },
+  "default_model": "medpsy-4b",
+  "fallback_model": "medpsy-1.7b"
+}
