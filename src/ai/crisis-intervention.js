@@ -45,7 +45,7 @@ const CRISIS_KEYWORDS = {
 class CrisisIntervention {
   constructor(config = {}) {
     this.config = {
-      autoEscalateToHuman: config.autoEscalateToHuman !== false,
+      autoEscalateToHuman: config.autoEscalateToHuman === true,
       enableHotlineReferral: config.enableHotlineReferral !== false,
       logCrises: config.logCrises !== false,
       region: config.region || 'china',

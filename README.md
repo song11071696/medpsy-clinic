@@ -1,5 +1,9 @@
 # MedPsy Clinic - Rule-Based Mental Health Consultation Platform
 
+> ⚠️ **医疗免责声明 / Medical Disclaimer**
+>
+> MedPsy Clinic 是一个基于规则的心理健康知识检索和咨询辅助平台，**不是**医疗设备或专业心理治疗工具。本平台提供的信息仅供参考，**不能替代**持证心理健康专业人员的诊断、治疗或建议。如果您正在经历心理健康危机，请立即联系专业心理援助热线（如：全国24小时心理援助热线 400-161-9995）或前往最近的医疗机构。本平台的危机检测功能仅为辅助工具，可能存在误报或漏报，请勿将其作为唯一的求助途径。
+
 ## 🔒 隐私保护特色
 
 MedPsy Clinic 将用户隐私保护作为核心设计原则：
@@ -14,7 +18,7 @@ MedPsy Clinic 将用户隐私保护作为核心设计原则：
 | **音频格式校验** | 语音输入严格校验文件格式（WAV/MP3/FLAC/OGG/WebM）、大小（≤25MB）和内容完整性 |
 | **Token 撤销机制** | 支持用户登出后立即撤销 JWT Token，防止令牌被盗用 |
 | **数据留存控制** | 默认 24 小时会话超时，过期数据自动清理 |
-| **零泄露承诺** | 用户心理健康数据永远不会被第三方获取，所有处理在设备端完成 |
+| **隐私优先设计** | 用户心理健康数据优先在设备端处理，减少第三方数据暴露风险 |
 | **免责声明** | 每条 AI 响应自动附加免责声明，提醒用户咨询专业医师 |
 
 ### 安全架构
@@ -33,7 +37,7 @@ RAG 检索 → QVAC 隐私推理 → 响应生成 → 免责声明附加 → 加
 
 | 等级 | 标签 | 响应时间 | 触发关键词示例 | 行动 |
 |------|------|---------|--------------|------|
-| **CRITICAL** | 紧急 | 立即 | 想自杀、结束生命、割腕、遗书 | 热线转介 + 紧急联系人通知 |
+| **CRITICAL** | 紧急 | 立即 | 想自杀、结束生命、割腕、遗书 | 热线转介 + 危机资源展示（默认不自动通知第三方联系人） |
 | **HIGH** | 高危 | 1小时内 | 不想活、活够了、想消失、想伤害自己 | 专业咨询师转介 + 热线提供 |
 | **MODERATE** | 中度 | 24小时内 | 撑不下去、快要崩溃、看不到希望 | 自助资源 + 预约建议 |
 | **LOW** | 低度 | 常规 | 太痛苦了、一个人好累 | 心理健康建议 + 持续监测 |
@@ -98,8 +102,8 @@ MedPsy Clinic is a rule-based mental health consultation platform that combines:
 │                        ▼           │  - Depression Guide     │  │
 │                 ┌──────────────┐   │  - Sleep Disorders      │  │
 │                 │   QVAC SDK   │   │  - Stress Management    │  │
-│                 │  (LLM/STT/   │   │  - Trauma & PTSD        │  │
-│                 │   TTS)       │   │  - ... 22 more topics   │  │
+│                 │  (Optional)  │   │  - Trauma & PTSD        │  │
+│                 │  LLM/STT/TTS│   │  - ... 22 more topics   │  │
 │                 └──────────────┘   └────────────────────────┘  │
 │                        │                                        │
 │          ┌─────────────┼─────────────┐                          │
@@ -185,7 +189,10 @@ npm install
 # 2. Copy environment config
 cp .env.example .env
 
-# 3. Run the full API server (port 3000)
+# 3. Set JWT_SECRET (required, ≥16 characters)
+export JWT_SECRET="your-secure-secret-key-here"
+
+# 4. Run the full API server (port 3000)
 npm run serve
 
 # Alternative: run minimal server
@@ -443,7 +450,7 @@ CMD ["node", "api-server.js"]
 
 ```bash
 docker build -t medpsy-clinic .
-docker run -p 3000:3000 -e PORT=3000 medpsy-clinic
+docker run -p 3000:3000 -e PORT=3000 -e JWT_SECRET="your-secure-secret-key-here" medpsy-clinic
 ```
 
 ### Docker Compose
@@ -458,6 +465,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}  # ≥16 characters
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
@@ -520,6 +528,7 @@ server {
 | `PORT` | `3000` | Server port |
 | `NODE_ENV` | `development` | Environment mode |
 | `LOG_LEVEL` | `info` | Logging level |
+| `JWT_SECRET` | *(none — required)* | JWT signing secret, ≥16 characters. Server refuses to start without it. |
 | `CORS_ORIGINS` | `localhost:3000,5173,8080` | Comma-separated allowed CORS origins |
 
 ## Knowledge Base
@@ -564,9 +573,12 @@ This metadata is parsed by the RAG engine and returned with each response as sou
 - **Disclaimer auto-appended** — every AI response includes a medical disclaimer reminding users to consult a licensed professional.
 - **Knowledge base versioning** — all documents include version/source metadata, returned with API responses for transparency.
 - The RAG `completion()` function is **async** and must be **awaited**
-- The `@qvac/sdk` is listed as an optional dependency (>=0.12.0) — install may require native build tools
-- Always consult a mental health professional for serious concerns
-- This is not a substitute for professional medical advice
+- `@qvac/sdk` is **optional** (>=0.12.0) — the platform works without it; install may require native build tools
+- **Crisis detection is keyword-based** — it is an aid, not a clinical assessment. May produce false positives or miss cases.
+- **autoEscalateToHuman is OFF by default** — crisis events are logged and hotlines displayed, but no automatic notification is sent to third-party contacts unless explicitly enabled.
+- Always consult a licensed mental health professional for clinical concerns
+- This platform is **not** a substitute for professional medical advice or diagnosis
+- See [MEDICAL_DISCLAIMER.md](./MEDICAL_DISCLAIMER.md), [SECURITY.md](./SECURITY.md), [PRIVACY.md](./PRIVACY.md), and [FEATURE_STATUS.md](./FEATURE_STATUS.md)
 
 ## License
 
