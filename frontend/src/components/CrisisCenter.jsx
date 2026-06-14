@@ -17,6 +17,42 @@ const SAFETY_STEPS = [
 
 export default function CrisisCenter() {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [reportText, setReportText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
+  const handleSubmitReport = async () => {
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const response = await fetch('/api/crisis/report', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          description: reportText,
+          severity: 'high',
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || '提交失败，请直接拨打热线');
+      }
+
+      setSubmitted(true);
+      setShowConfirm(false);
+    } catch (err) {
+      setSubmitError(err.message || '提交失败，请直接拨打热线 400-161-9995');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -100,7 +136,12 @@ export default function CrisisCenter() {
           如果您希望获得专业人员的帮助，请填写以下信息。我们会尽快安排专业人员与您联系。
         </p>
 
-        {!showConfirm ? (
+        {submitted ? (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+            <p className="text-green-700 font-medium">✅ 已提交，专业人员将尽快联系您。</p>
+            <p className="text-sm text-green-600 mt-1">如有紧急情况，请直接拨打 120 或 400-161-9995</p>
+          </div>
+        ) : !showConfirm ? (
           <button
             onClick={() => setShowConfirm(true)}
             className="w-full py-3 border-2 border-dashed border-primary-300 text-primary-600 rounded-xl font-medium hover:bg-primary-50 transition-colors"
@@ -113,19 +154,25 @@ export default function CrisisCenter() {
               placeholder="请简要描述您的情况（选填）..."
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 resize-none"
+              value={reportText}
+              onChange={(e) => setReportText(e.target.value)}
             />
+            {submitError && (
+              <p className="text-sm text-red-600">⚠️ {submitError}</p>
+            )}
             <div className="flex space-x-3">
               <button
-                onClick={() => setShowConfirm(false)}
+                onClick={() => { setShowConfirm(false); setSubmitError(''); }}
                 className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
               >
                 取消
               </button>
               <button
-                onClick={() => { alert('已提交，专业人员将尽快联系您。'); setShowConfirm(false); }}
-                className="flex-1 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600"
+                onClick={handleSubmitReport}
+                disabled={submitting}
+                className="flex-1 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 disabled:opacity-50"
               >
-                提交请求
+                {submitting ? '提交中...' : '提交请求'}
               </button>
             </div>
           </div>

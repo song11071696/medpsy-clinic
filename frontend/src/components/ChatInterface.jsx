@@ -44,9 +44,14 @@ export default function ChatInterface() {
     setError(null);
 
     try {
+      // 安全修复：添加认证token到请求头
+      const token = localStorage.getItem('token');
+      const requestHeaders = { 'Content-Type': 'application/json' };
+      if (token) requestHeaders['Authorization'] = `Bearer ${token}`;
+
       const response = await fetch(`${API_BASE}/consult`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: requestHeaders,
         body: JSON.stringify({ query: queryText }),
       });
 
@@ -75,7 +80,7 @@ export default function ChatInterface() {
       const errorMsg = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: `⚠️ 抱歉，发生了错误：${err.message}\n\n请检查后端服务是否已启动，然后重试。`,
+        content: `⚠️ 抱歉，发生了错误。请稍后重试或联系支持人员。`,
         timestamp: new Date(),
         sources: [],
         isError: true,

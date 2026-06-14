@@ -16,15 +16,27 @@ export default function LoginPage({ onLogin }) {
     setLoading(true);
     setError('');
     try {
-      // Simulate login for now
-      const userData = {
-        id: '1',
-        username: form.username || '用户',
-        email: form.email || 'user@example.com',
-        role: 'patient',
-      };
-      localStorage.setItem('token', 'demo-token');
-      onLogin(userData);
+      // 安全修复：调用真实API进行认证
+      const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
+      const payload = isRegister
+        ? { username: form.username, email: form.email, password: form.password }
+        : { username: form.username, password: form.password };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || '请求失败');
+      }
+
+      // 存储真实JWT token
+      localStorage.setItem('token', data.token);
+      onLogin(data.user);
     } catch (err) {
       setError(err.message || '登录失败，请重试');
     } finally {

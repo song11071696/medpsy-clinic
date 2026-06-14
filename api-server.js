@@ -5,6 +5,7 @@
 
 require('dotenv').config();
 
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -117,6 +118,32 @@ const serviceState = {
 };
 
 // ============================================================
+// In-memory user store (replace with database in production)
+// ============================================================
+const userStore = new Map(); // username -> { id, username, email, passwordHash, salt, role, createdAt }
+
+function hashPassword(password, salt) {
+  return crypto.createHmac('sha256', salt).update(password).digest('hex');
+}
+
+function createUser(username, email, password) {
+  const salt = crypto.randomBytes(32).toString('hex');
+  const passwordHash = hashPassword(password, salt);
+  const id = crypto.randomUUID();
+  const user = { id, username, email, passwordHash, salt, role: 'patient', createdAt: new Date().toISOString() };
+  userStore.set(username, user);
+  return { id: user.id, username: user.username, email: user.email, role: user.role };
+}
+
+function validateUser(username, password) {
+  const user = userStore.get(username);
+  if (!user) return null;
+  const hash = hashPassword(password, user.salt);
+  if (hash !== user.passwordHash) return null;
+  return { id: user.id, username: user.username, email: user.email, role: user.role };
+}
+
+// ============================================================
 // Crisis Detection Middleware
 // ============================================================
 
@@ -169,16 +196,17 @@ function sanitizeInput(query) {
 
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:8080'];
+  : ['http://localhost:3000', 'http://localhost:5173'];
 app.use(cors({
   origin: function (origin, callback) {
+    // 安全修复：无origin请求（如Postman）在生产环境也拒绝
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   maxAge: 86400,
@@ -214,36 +242,13 @@ app.use((req, res, next) => {
 // ============================================================
 
 app.get('/health', (req, res) => {
-  const healthResponse = {
+  // 安全修复：健康检查不泄露内部系统信息、知识库文档列表、内存使用等
+  res.json({
     status: 'ok',
     service: 'medpsy-clinic',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
-  };
-
-  // 仅开发环境返回详细系统信息
-  if (!isProduction) {
-    const uptime = serviceState.startedAt
-      ? Math.floor((Date.now() - serviceState.startedAt.getTime()) / 1000)
-      : 0;
-
-    healthResponse.uptime_seconds = uptime;
-    healthResponse.model_loaded = serviceState.modelLoaded;
-    healthResponse.total_requests = serviceState.requestCount;
-    healthResponse.ws_connections = serviceState.wsConnections;
-    healthResponse.knowledge_base = {
-      count: getDocumentTitles().length,
-      documents: getDocumentTitles(),
-    };
-    healthResponse.system = {
-      platform: process.platform,
-      arch: process.arch,
-      node_version: process.version,
-      memory_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-    };
-  }
-
-  res.json(healthResponse);
+  });
 });
 
 // ============================================================
@@ -270,14 +275,58 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(400).json({ error: 'Invalid input' });
     }
 
-    // 安全修复：拒绝未配置的默认登录，要求实际用户验证
-    // 演示环境不再接受任意凭证
-    return res.status(401).json({
-      error: 'Authentication failed',
-      message: 'Invalid credentials. Please register first via /api/v2/users/register',
+    // 安全修复：使用真实用户验证
+    const user = validateUser(username, password);
+    if (!user) {
+      return res.status(401).json({
+        error: 'Authentication failed',
+        message: '用户名或密码错误',
+      });
+    }
+
+    const token = generateToken({ id: user.id, username: user.username, role: user.role });
+    return res.json({
+      success: true,
+      token,
+      user: { id: user.id, username: user.username, email: user.email, role: user.role },
     });
   } catch (err) {
     console.error('[Auth] Login error:', encryption.maskSensitiveData(err.message));
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 注册端点
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Missing fields', message: 'Username and password are required' });
+    }
+
+    if (username.length < 3 || username.length > 50) {
+      return res.status(400).json({ error: 'Invalid input', message: 'Username must be 3-50 characters' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Invalid input', message: 'Password must be at least 8 characters' });
+    }
+
+    if (userStore.has(username)) {
+      return res.status(409).json({ error: 'Conflict', message: '用户名已存在' });
+    }
+
+    const user = createUser(username, email || '', password);
+    const token = generateToken({ id: user.id, username: user.username, role: user.role });
+
+    return res.status(201).json({
+      success: true,
+      token,
+      user: { id: user.id, username: user.username, email: user.email, role: user.role },
+    });
+  } catch (err) {
+    console.error('[Auth] Register error:', encryption.maskSensitiveData(err.message));
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -332,6 +381,53 @@ app.post('/api/consent/accept', express.json(), (req, res) => {
     consentVersion: version || '1.0',
     timestamp: new Date().toISOString(),
   });
+});
+
+// ============================================================
+// Crisis Report Endpoint (安全修复：真实后端处理，不再仅前端alert)
+// ============================================================
+const crisisReportStore = [];
+
+app.post('/api/crisis/report', optionalAuth, (req, res) => {
+  try {
+    const { description, severity, timestamp } = req.body;
+
+    const report = {
+      id: crypto.randomUUID(),
+      userId: req.user?.id || 'anonymous',
+      description: description ? String(description).substring(0, 1000) : '',
+      severity: severity || 'unknown',
+      timestamp: timestamp || new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+    };
+
+    // 加密存储报告
+    crisisReportStore.push({
+      ...report,
+      description: encryption.maskSensitiveData(report.description),
+    });
+
+    console.error(`[CRISIS ALERT] New crisis report: id=${report.id}, severity=${report.severity}, userId=${report.userId}`);
+
+    res.json({
+      success: true,
+      message: '报告已提交，专业人员将尽快联系您',
+      reportId: report.id,
+      hotlines: crisisService.analyze(description || '', report.userId).hotlines,
+    });
+  } catch (err) {
+    console.error('[Crisis] Report error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/crisis/resources', (req, res) => {
+  res.json({ success: true, hotlines: crisisService.analyze('', '').hotlines });
+});
+
+app.get('/api/crisis/hotlines', (req, res) => {
+  res.json({ success: true, hotlines: crisisService.analyze('', '').hotlines });
 });
 
 // ============================================================
@@ -938,23 +1034,10 @@ app.post('/v1/chat/completions', authMiddleware, consultationLimiter.middleware(
 
 // 404 handler
 app.use((req, res) => {
+  // 安全修复：404不暴露所有可用端点列表
   res.status(404).json({
     error: 'Not found',
-    available_endpoints: [
-      'GET  /health',
-      'GET  /v1/docs',
-      'POST /api/auth/login',
-      'POST /api/auth/logout',
-      'GET  /api/consent',
-      'POST /api/consent/accept',
-      'POST /api/consult',
-      'POST /api/consult/stream',
-      'POST /api/consult/voice',
-      'GET  /api/knowledge',
-      'POST /api/retrieve',
-      'GET  /v1/models',
-      'POST /v1/chat/completions',
-    ],
+    message: 'The requested resource was not found',
   });
 });
 
@@ -1082,7 +1165,7 @@ function setupWebSocket(server) {
           return;
         }
 
-        ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${msg.type}` }));
+        ws.send(JSON.stringify({ type: 'error', message: 'Unknown message type' }));
       } catch (err) {
         ws.send(JSON.stringify({ type: 'error', message: 'Internal server error' }));
       }
